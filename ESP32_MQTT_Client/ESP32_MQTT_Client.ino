@@ -143,39 +143,46 @@ void callback(char *rx_topic, byte *payload, unsigned int length) {
 
 
 void loop() {
-  client.loop();
   String msRemaining_str = "";
+  while (1) {
 
-  switch (state) {
-    case CLOCK:
-      // TODO Display current hour and minute values
-      break;
-    case TIMER_ACTIVE:
-      // Calculate milliseconds remaining
-      msElapsed = millis() - timestamp;
-      // Set last calculated time
-      timestamp = millis();
-      msRemaining -= msElapsed;
-      // Convert seconds remaining to HH:MM or MM:SS or SS:mm
-      get_nixie_numbers();
-      // TODO Display time remaining
-      // TODO: Publish seconds remaining back to HASSIO
-      if (millis() - last_update > 1000) {
-        last_update = millis();
-        msRemaining_str += "{{remaining: " + String(msRemaining/1000) + "}}";
-        client.publish(state_topic, msRemaining_str.c_str());
-      }
-      if (msRemaining <= 0) {
-        state = TIMER_END;
-      }
-      break;
-    case TIMER_END:
-      // TODO Flash the display with 4 0's
-      Serial.println("Timer done");
-      state = CLOCK;
-      break;
-    default:
-      state = CLOCK;
-      break;
+    client.loop();
+    switch (state) {
+      case CLOCK:
+        // TODO Display current hour and minute values
+        break;
+      case TIMER_ACTIVE:
+        // Calculate milliseconds remaining
+        msElapsed = millis() - timestamp;
+        // Set last calculated time
+        timestamp = millis();
+        msRemaining -= msElapsed;
+        // Convert seconds remaining to HH:MM or MM:SS or SS:mmX
+        // If there is less than a minute left, up the refresh rate
+        if (msRemaining < 60000) {
+          get_nixie_numbers();
+          // Otherwise only refresh if a second has passed since the last refresh
+        } else if (millis() - last_update > 1000) {
+          get_nixie_numbers();
+          last_update = millis();
+          // Publish last update back to Home Assistant
+          msRemaining_str = "{\"remaining\": " + String(msRemaining / 1000) + "}";
+          client.publish(state_topic, msRemaining_str.c_str());
+        }
+        // TODO Display time remaining
+
+        if (msRemaining <= 0) {
+          state = TIMER_END;
+        }
+        break;
+      case TIMER_END:
+        // TODO Flash the display with 4 0's
+        Serial.println("Timer done");
+        state = CLOCK;
+        break;
+      default:
+        state = CLOCK;
+        break;
+    }
   }
 }
