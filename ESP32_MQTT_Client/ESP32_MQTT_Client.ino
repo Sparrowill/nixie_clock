@@ -69,11 +69,15 @@ void callback(char *rx_topic, byte *payload, unsigned int length) {
     timestamp = millis();
     // Set number of ms to run timer for
     msRemaining = str_payload.toInt() * 1000;
+    // Tell the rest of Home Assistant that we have started a timer
+    String str = String(msRemaining / 1000);
+    client.publish(new_timer_topic, str.c_str());
   }
 }
 
 
 void loop() {
+
   unsigned long msElapsed = 0;
   unsigned long last_update = 0;
   String msRemaining_str = "";

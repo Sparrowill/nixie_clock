@@ -15,6 +15,7 @@ const char *command_topic = "nixie_clock/set";
 const char *online_topic = "nixie_clock/available";
 const char *state_topic = "nixie_clock/remaining";
 const char *time_topic = "nixie_clock/timestamp";
+const char *new_timer_topic = "nixie_clock/new_timer";
 const char *mqtt_username = "mqtt";
 const char *mqtt_password = "MQTTpassword1!";
 const int mqtt_port = 1883;
