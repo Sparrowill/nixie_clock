@@ -1,40 +1,12 @@
-#include <WiFi.h>
-#include <PubSubClient.h>
-
-// WiFi
-const char *ssid = "27WiFi";        // Enter your WiFi name
-const char *password = "Connect!";  // Enter WiFi password
-
-// MQTT Broker
-const char *mqtt_broker = "192.168.1.41";
-const char *command_topic = "nixie_clock/set";
-const char *online_topic = "nixie_clock/available";
-const char *state_topic = "nixie_clock/remaining";
-const char *time_topic = "nixie_clock/timestamp";
-const char *mqtt_username = "mqtt";
-const char *mqtt_password = "MQTTpassword1!";
-const int mqtt_port = 1883;
-const String client_id = "nixie_clock";
+#include "constants.h"
+#include "helpers.h"
 
 // Timing variables
 int currentHour = 0;
 int currentMin = 0;
 int msRemaining = 0;
 unsigned long timestamp = 0;
-unsigned long msElapsed = 0;
-unsigned long last_update = 0;
 
-
-WiFiClient espClient;
-PubSubClient client(espClient);
-
-enum STATE {
-  CLOCK,
-  TIMER_ACTIVE,
-  TIMER_END
-};
-
-STATE state = CLOCK;
 
 void wifi_connect(const char *ssid, const char *password) {
   WiFi.begin(ssid, password);
@@ -45,50 +17,7 @@ void wifi_connect(const char *ssid, const char *password) {
   Serial.println("Connected to the WiFi network");
 }
 
-int get_nixie_numbers(bool clock = false) {
-  // Take in ms remaining, return a byte showing what numbers need to display on clock
-  int nixie_numbers = 0;
-  int pairOne = 0;
-  int pairTwo = 0;
-  unsigned long hours = 0;
-  unsigned long minutes = 0;
-  unsigned long seconds = 0;
-  unsigned long milliseconds = 0;
-  if (clock) {
-    // Process hrs and minutes
-    pairOne = currentHour;
-    pairTwo = currentMin;
-  } else {
-    // Process msRemaining
-    if (msRemaining > 3600000 /*1 hour*/) {  // Display hours:minutes
-      // Display hours and minutes
-      hours = msRemaining / 3600000;
-      hours %= 24;
-      pairOne = hours;
-      minutes = msRemaining / 60000;
-      minutes %= 60;
-      pairTwo = minutes;
-    } else if (msRemaining > 60000 /*1 minute*/) {  // Display minutes:seconds
-      // Display minutes and seconds
-      minutes = msRemaining / 60000;
-      minutes %= 60;
-      pairOne = minutes;
-      seconds = msRemaining / 1000;
-      seconds %= 60;
-      pairTwo = seconds;
-    } else if (msRemaining > 1000 /*1 Second*/) {  // Display seconds:milliseconds
-      seconds = msRemaining / 1000;
-      seconds %= 60;
-      pairOne = seconds;
-      milliseconds = msRemaining % 1000;
-      pairTwo = milliseconds / 10;
-    }
-  }
-  nixie_numbers += (100 * pairOne);
-  nixie_numbers += pairTwo;
-  Serial.print("Nixie :");
-  Serial.println(nixie_numbers);
-  return nixie_numbers;
+void mqtt_connect() {
 }
 
 void setup() {
@@ -97,6 +26,7 @@ void setup() {
   // connecting to a WiFi network
   wifi_connect(ssid, password);
   //connecting to a mqtt broker
+  // mqtt_connect();
   client.setServer(mqtt_broker, mqtt_port);
   client.setCallback(callback);
   while (!client.connected()) {
@@ -114,7 +44,6 @@ void setup() {
   // Start listening to new timers coming in
   client.subscribe(command_topic);
   client.subscribe(time_topic);
-
   // Set display to CLOCK
   state = CLOCK;
 }
@@ -130,7 +59,9 @@ void callback(char *rx_topic, byte *payload, unsigned int length) {
     // Update clock values
     currentHour = str_payload.substring(0, 2).toInt();
     currentMin = str_payload.substring(3, 5).toInt();
-    get_nixie_numbers(true);
+    get_nixie_numbers(currentHour, currentMin);
+    // Remind Home Assistant we're still alive when time updates (once a minute)
+    client.publish(online_topic, "online");
   } else {  // Payload is a new timer
     // New timer started
     state = TIMER_ACTIVE;
@@ -143,13 +74,15 @@ void callback(char *rx_topic, byte *payload, unsigned int length) {
 
 
 void loop() {
+  unsigned long msElapsed = 0;
+  unsigned long last_update = 0;
   String msRemaining_str = "";
   while (1) {
-
     client.loop();
     switch (state) {
       case CLOCK:
-        // TODO Display current hour and minute values
+        // TODO Display current hour and minute values when clock changes
+
         break;
       case TIMER_ACTIVE:
         // Calculate milliseconds remaining
@@ -157,13 +90,14 @@ void loop() {
         // Set last calculated time
         timestamp = millis();
         msRemaining -= msElapsed;
-        // Convert seconds remaining to HH:MM or MM:SS or SS:mmX
+        // Convert seconds remaining to HH:MM or MM:SS or SS:mm
         // If there is less than a minute left, up the refresh rate
         if (msRemaining < 60000) {
-          get_nixie_numbers();
+          get_nixie_numbers(msRemaining);
           // Otherwise only refresh if a second has passed since the last refresh
-        } else if (millis() - last_update > 1000) {
-          get_nixie_numbers();
+        }
+        if (millis() - last_update > 1000) {
+          get_nixie_numbers(msRemaining);
           last_update = millis();
           // Publish last update back to Home Assistant
           msRemaining_str = "{\"remaining\": " + String(msRemaining / 1000) + "}";
