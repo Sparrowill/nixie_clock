@@ -1,5 +1,6 @@
 #include "constants.h"
 #include "helpers.h"
+#include "Omnixie_NTDB.h"
 
 // Timing variables
 int currentHour = 0;
@@ -7,13 +8,16 @@ int currentMin = 0;
 int msRemaining = 0;
 unsigned long timestamp = 0;
 
-#include "Omnixie_NTDB.h"
+bool got_new_clock = false;
+
 
 
 #define NTDB_count 1
 // define how many NTDB boards in use
 
 Omnixie_NTDB nixieClock(11, 8, 12, 10, 6, 5, NTDB_count);
+// pin_DataIN, pin_STCP(latch), pin_SHCP(clock), pin_Blank(Output Enable; PWM pin preferred),
+// HVEnable pin, Colon pin, number of Nixie Tube Driver Boards
 
 void wifi_connect(const char *ssid, const char *password) {
   WiFi.begin(ssid, password);
@@ -29,9 +33,6 @@ void wifi_connect(const char *ssid, const char *password) {
   nixieClock.setBrightness(0xff);
   //turn on the tube display
   nixieClock.display();
-}
-
-void mqtt_connect() {
 }
 
 void setup() {
@@ -73,7 +74,7 @@ void callback(char *rx_topic, byte *payload, unsigned int length) {
     // Update clock values
     currentHour = str_payload.substring(0, 2).toInt();
     currentMin = str_payload.substring(3, 5).toInt();
-    get_nixie_numbers(currentHour, currentMin);
+    got_new_clock = true;
     // Remind Home Assistant we're still alive when time updates (once a minute)
     client.publish(online_topic, "online");
   } else {  // Payload is a new timer
@@ -101,9 +102,9 @@ void loop() {
     client.loop();
     switch (state) {
       case CLOCK:
-        // Update the clock every second
-        if (millis() - last_clock_update > 1000) {
-          last_clock_update = millis();
+        // Update the clock when the time changes
+        if (got_new_clock) {
+          got_new_clock = false;
           nn = get_nixie_numbers(currentHour, currentMin);
           nixieClock.setNumber(nn, 0b1111);
           //Light up the tubes
