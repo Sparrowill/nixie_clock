@@ -7,6 +7,13 @@ int currentMin = 0;
 int msRemaining = 0;
 unsigned long timestamp = 0;
 
+#include "Omnixie_NTDB.h"
+
+
+#define NTDB_count 1
+// define how many NTDB boards in use
+
+Omnixie_NTDB nixieClock(11, 8, 12, 10, 6, 5, NTDB_count);
 
 void wifi_connect(const char *ssid, const char *password) {
   WiFi.begin(ssid, password);
@@ -15,6 +22,13 @@ void wifi_connect(const char *ssid, const char *password) {
     Serial.println("Connecting to WiFi..");
   }
   Serial.println("Connected to the WiFi network");
+  //turn on the high voltage provided by NCH6300HV
+  nixieClock.setHVPower(true);
+
+  // Brightness control, range 0x00(off) to 0xff(brightest).
+  nixieClock.setBrightness(0xff);
+  //turn on the tube display
+  nixieClock.display();
 }
 
 void mqtt_connect() {
@@ -64,6 +78,7 @@ void callback(char *rx_topic, byte *payload, unsigned int length) {
     client.publish(online_topic, "online");
   } else {  // Payload is a new timer
     // New timer started
+    Serial.println("Got New Timer");
     state = TIMER_ACTIVE;
     // Mark when timer started
     timestamp = millis();
@@ -77,45 +92,65 @@ void callback(char *rx_topic, byte *payload, unsigned int length) {
 
 
 void loop() {
-
   unsigned long msElapsed = 0;
-  unsigned long last_update = 0;
+  unsigned long last_timer_update = 0;
+  unsigned long last_clock_update = 0;
   String msRemaining_str = "";
+  int nn = 0;
   while (1) {
     client.loop();
     switch (state) {
       case CLOCK:
-        // TODO Display current hour and minute values when clock changes
-
+        // Update the clock every second
+        if (millis() - last_clock_update > 1000) {
+          last_clock_update = millis();
+          nn = get_nixie_numbers(currentHour, currentMin);
+          nixieClock.setNumber(nn, 0b1111);
+          //Light up the tubes
+          nixieClock.display();
+        }
         break;
       case TIMER_ACTIVE:
+
         // Calculate milliseconds remaining
         msElapsed = millis() - timestamp;
         // Set last calculated time
         timestamp = millis();
+        // Update timer
         msRemaining -= msElapsed;
+
         // Convert seconds remaining to HH:MM or MM:SS or SS:mm
-        // If there is less than a minute left, up the refresh rate
+        // If there is less than a minute left, up the refresh rate to accout for milliseconds
         if (msRemaining < 60000) {
-          get_nixie_numbers(msRemaining);
-          // Otherwise only refresh if a second has passed since the last refresh
+          nn = get_nixie_numbers(msRemaining);
         }
-        if (millis() - last_update > 1000) {
-          get_nixie_numbers(msRemaining);
-          last_update = millis();
+        // Otherwise only refresh if a second has passed since the last refresh
+        if (millis() - last_timer_update > 1000) {
+          nn = get_nixie_numbers(msRemaining);
+          last_timer_update = millis();
           // Publish last update back to Home Assistant
           msRemaining_str = "{\"remaining\": " + String(msRemaining / 1000) + "}";
           client.publish(state_topic, msRemaining_str.c_str());
         }
-        // TODO Display time remaining
-
+        // Display time remaining
+        nixieClock.setNumber(nn, 0b1111);
+        nixieClock.display();
         if (msRemaining <= 0) {
           state = TIMER_END;
         }
         break;
       case TIMER_END:
-        // TODO Flash the display with 4 0's
+        // Flash the display with 4 0's
         Serial.println("Timer done");
+        for (int i = 0; i < 6; i++) {
+          nixieClock.setNumber(0000, 0b1111);
+          nixieClock.display();
+          delay(500);
+          nixieClock.setBrightness(0x00);
+          nixieClock.display();
+          delay(500);
+          nixieClock.setBrightness(0xff);
+        }
         state = CLOCK;
         break;
       default:

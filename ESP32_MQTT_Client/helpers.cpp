@@ -1,5 +1,6 @@
 #include "helpers.h"
 
+// Called if displaying a timer
 int get_nixie_numbers(int msRemaining) {
   // Take in ms remaining, return a byte showing what numbers need to display on clock
   int nixie_numbers = 0;
@@ -40,6 +41,7 @@ int get_nixie_numbers(int msRemaining) {
   return nixie_numbers;
 }
 
+// Called if displaying a clock
 int get_nixie_numbers(int currentHour, int currentMin) {
   // Take in current time, return as 4 dgit int
   int nixie_numbers = 0;
