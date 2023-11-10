@@ -7,10 +7,7 @@ int currentHour = 0;
 int currentMin = 0;
 int msRemaining = 0;
 unsigned long timestamp = 0;
-
 bool got_new_clock = false;
-
-
 
 #define NTDB_count 1
 // define how many NTDB boards in use
@@ -26,6 +23,9 @@ void wifi_connect(const char *ssid, const char *password) {
     Serial.println("Connecting to WiFi..");
   }
   Serial.println("Connected to the WiFi network");
+}
+
+void nixie_setup() {
   //turn on the high voltage provided by NCH6300HV
   nixieClock.setHVPower(true);
 
@@ -34,14 +34,29 @@ void wifi_connect(const char *ssid, const char *password) {
   //turn on the tube display
   nixieClock.display();
 }
+void CathodePoisoningPrevention(unsigned int num, int msDelay) {
+  if (num < 1) exit;
+  for (byte n = 0; n < num; n++) {
+    Serial.println("Running Cathode Poisoning Prevention ... ");
+    for (byte i = 0; i < 10; i++) {
+      nixieClock.setNumber(i * 1111, 0b1111);
+      nixieClock.display();
+      delay(msDelay);
+    }
+  }
+  delay(1000);
+}
 
 void setup() {
   // Set software serial baud to 115200;
   Serial.begin(115200);
   // connecting to a WiFi network
   wifi_connect(ssid, password);
+  // Nixie Setup
+  nixie_setup();
+  CathodePoisoningPrevention(3, 1000);
+
   //connecting to a mqtt broker
-  // mqtt_connect();
   client.setServer(mqtt_broker, mqtt_port);
   client.setCallback(callback);
   while (!client.connected()) {
@@ -60,6 +75,7 @@ void setup() {
   client.subscribe(command_topic);
   client.subscribe(time_topic);
   // Set display to CLOCK
+
   state = CLOCK;
 }
 
@@ -78,9 +94,6 @@ void callback(char *rx_topic, byte *payload, unsigned int length) {
     // Remind Home Assistant we're still alive when time updates (once a minute)
     client.publish(online_topic, "online");
   } else {  // Payload is a new timer
-    // New timer started
-    Serial.println("Got New Timer");
-    state = TIMER_ACTIVE;
     // Mark when timer started
     timestamp = millis();
     // Set number of ms to run timer for
@@ -88,6 +101,8 @@ void callback(char *rx_topic, byte *payload, unsigned int length) {
     // Tell the rest of Home Assistant that we have started a timer
     String str = String(msRemaining / 1000);
     client.publish(new_timer_topic, str.c_str());
+    // Trigge the change to Timer on nixie display
+    state = TIMER_ACTIVE;
   }
 }
 
@@ -98,9 +113,11 @@ void loop() {
   unsigned long last_clock_update = 0;
   String msRemaining_str = "";
   int nn = 0;
+  bool update_timer = false;
   while (1) {
     client.loop();
     switch (state) {
+
       case CLOCK:
         // Update the clock when the time changes
         if (got_new_clock) {
@@ -111,35 +128,39 @@ void loop() {
           nixieClock.display();
         }
         break;
-      case TIMER_ACTIVE:
 
+      case TIMER_ACTIVE:
         // Calculate milliseconds remaining
         msElapsed = millis() - timestamp;
         // Set last calculated time
         timestamp = millis();
         // Update timer
         msRemaining -= msElapsed;
-
-        // Convert seconds remaining to HH:MM or MM:SS or SS:mm
         // If there is less than a minute left, up the refresh rate to accout for milliseconds
         if (msRemaining < 60000) {
           nn = get_nixie_numbers(msRemaining);
+          update_timer = true;
         }
         // Otherwise only refresh if a second has passed since the last refresh
         if (millis() - last_timer_update > 1000) {
-          nn = get_nixie_numbers(msRemaining);
           last_timer_update = millis();
+          update_timer = true;
           // Publish last update back to Home Assistant
           msRemaining_str = "{\"remaining\": " + String(msRemaining / 1000) + "}";
           client.publish(state_topic, msRemaining_str.c_str());
         }
-        // Display time remaining
-        nixieClock.setNumber(nn, 0b1111);
-        nixieClock.display();
+        if (update_timer) {
+          update_timer = false;
+          nn = get_nixie_numbers(msRemaining);
+          // Display time remaining
+          nixieClock.setNumber(nn, 0b1111);
+          nixieClock.display();
+        }
         if (msRemaining <= 0) {
           state = TIMER_END;
         }
         break;
+
       case TIMER_END:
         // Flash the display with 4 0's
         Serial.println("Timer done");
@@ -154,6 +175,7 @@ void loop() {
         }
         state = CLOCK;
         break;
+
       default:
         state = CLOCK;
         break;
