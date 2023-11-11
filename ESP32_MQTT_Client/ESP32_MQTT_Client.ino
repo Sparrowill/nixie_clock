@@ -35,7 +35,6 @@ void nixie_setup() {
   nixieClock.display();
 }
 void CathodePoisoningPrevention(unsigned int num, int msDelay) {
-  if (num < 1) exit;
   for (byte n = 0; n < num; n++) {
     Serial.println("Running Cathode Poisoning Prevention ... ");
     for (byte i = 0; i < 10; i++) {
@@ -126,6 +125,10 @@ void loop() {
           nixieClock.setNumber(nn, 0b1111);
           //Light up the tubes
           nixieClock.display();
+        }
+        // If the time is midnight, do cathode poisoning prevention
+        if (nn == 2400){
+          CathodePoisoningPrevention(3, 1000);
         }
         break;
 
