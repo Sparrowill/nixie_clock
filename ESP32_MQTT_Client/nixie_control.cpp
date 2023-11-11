@@ -1,8 +1,45 @@
-#include "helpers.h"
+#include "nixie_control.h"
+#include <Omnixie_NTDB.h>
+
+Omnixie_NTDB nixieClock(11, 8, 12, 10, 6, 5, NTDB_count);
+// pin_DataIN, pin_STCP(latch), pin_SHCP(clock), pin_Blank(Output Enable; PWM pin preferred),
+// HVEnable pin, Colon pin, number of Nixie Tube Driver Boards
+
+void nixie_setup() {
+  //turn on the high voltage provided by NCH6300HV
+  nixieClock.setHVPower(true);
+  // Brightness control, range 0x00(off) to 0xff(brightest).
+  nixieClock.setBrightness(0xff);
+  //turn on the tube display
+  nixieClock.display();
+}
+
+void cathode_poisoning_prevention(unsigned int num, int msDelay) {
+  for (byte n = 0; n < num; n++) {
+    Serial.println("Running Cathode Poisoning Prevention ... ");
+    for (byte i = 0; i < 10; i++) {
+      show_nixie(i * 1111, 0b1111);
+      delay(msDelay);
+    }
+  }
+  delay(1000);
+}
+
+void show_nixie(int nn, byte tubes) {
+  nixieClock.setBrightness(0xff);
+  nixieClock.setNumber(nn, tubes);
+  //Light up the tubes
+  nixieClock.display();
+}
+
+void nixie_off() {
+  nixieClock.setBrightness(0x00);
+  nixieClock.display();
+}
 
 // Called if displaying a timer
 int get_nixie_numbers(int msRemaining) {
-  // Take in ms remaining, return a byte showing what numbers need to display on clock
+  // Take in ms remaining, return a int showing what numbers need to display on clock
   int nixie_numbers = 0;
   int pairOne = 0;
   int pairTwo = 0;
