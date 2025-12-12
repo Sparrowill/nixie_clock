@@ -60,7 +60,7 @@ const int daylightOffset_sec = 3600;
 #define NTDB_count 1
 // define how many NTDB boards in use
 
-Omnixie_NTDB nixieClock(11, 8, 12, 10, 6, 5, NTDB_count);
+Omnixie_NTDB nixieClock(D1, D2, D3, D4, D5, D6, NTDB_count);
 // pin_DataIN, pin_STCP(latch), pin_SHCP(clock), pin_Blank(Output Enable; PWM pin preferred),
 // HVEnable pin, Colon pin, number of Nixie Tube Driver Boards
 // PWM Pins on Arduino Uno: 3, 5, 6, 9, 10, 11; PWM FREQUENCY 490 Hz (pins 5 and 6: 980 Hz)
@@ -84,13 +84,6 @@ void setup() {
   Serial.println("Got Wifi");
   // Init time
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  while (true) {
-    for (int i = 0; i < 9999; i++) {
-      nixieClock.setNumber(i, 0b1111);
-      nixieClock.display();
-      delay(10);
-    }
-  }
 }
 
 void loop() {

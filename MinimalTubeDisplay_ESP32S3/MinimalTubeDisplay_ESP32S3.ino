@@ -14,19 +14,23 @@
   6) Some jumper wires
 
 
+Omnixie_NTDB nixieClock(D1, D2, D3, D4, D5, D6, NTDB_count);
+// pin_DataIN, pin_STCP(latch), pin_SHCP(clock), pin_Blank(Output Enable; PWM pin preferred),
+// HVEnable pin, Colon pin, number of Nixie Tube Driver Boards
+
   Circuit:
-  Connect the NTDB to Arduino Uno:
+  Connect the NTDB to Arduino :
   --------------------------------
     NTDB        Arduino Pins
   --------------------------------
     GND         GND
     DC5V
-    DATA        11
-    OE          10
-    STCP        8
-    SHCP        12
-    COLON       5 (Not In Use)
-    ON/OFF      6 (HVEnable)
+    DATA        D1
+    OE          D4
+    STCP        D2
+    SHCP        D3
+    COLON       D6 (Not In Use)
+    ON/OFF      D5 (HVEnable)
   --------------------------------
   Connect the 12V DC power to the NTDB board 
 
@@ -47,20 +51,11 @@
 
 #include "Omnixie_NTDB.h"
 
-#include <WiFi.h>
-#include "time.h"
-
-const char* ssid = "27WiFi";
-const char* password = "Connect!";
-
-const char* ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = 0;
-const int daylightOffset_sec = 3600;
 
 #define NTDB_count 1
 // define how many NTDB boards in use
 
-Omnixie_NTDB nixieClock(11, 8, 12, 10, 6, 5, NTDB_count);
+Omnixie_NTDB nixieClock(D1, D2, D3, D4, D5, D6, NTDB_count);
 // pin_DataIN, pin_STCP(latch), pin_SHCP(clock), pin_Blank(Output Enable; PWM pin preferred),
 // HVEnable pin, Colon pin, number of Nixie Tube Driver Boards
 // PWM Pins on Arduino Uno: 3, 5, 6, 9, 10, 11; PWM FREQUENCY 490 Hz (pins 5 and 6: 980 Hz)
@@ -74,44 +69,19 @@ void setup() {
   //turn on the tube display
   nixieClock.display();
 
+  //quickly loop through all digits to prevent cathode poisoning
   Serial.begin(115200);
-
-  //Connect to Wi-Fi
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-  }
-  Serial.println("Got Wifi");
-  // Init time
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  while (true) {
-    for (int i = 0; i < 9999; i++) {
-      nixieClock.setNumber(i, 0b1111);
-      nixieClock.display();
-      delay(10);
-    }
-  }
 }
 
 void loop() {
   CathodePoisoningPrevention(3, 1000);
-  struct tm timeinfo;
 
-  while (true) {
-    if (!getLocalTime(&timeinfo)) {
-      Serial.println("Failed to obtain time");
-      return;
-    }
-    int currentTime = (100 * timeinfo.tm_hour) + timeinfo.tm_min;
-    Serial.println(currentTime);
-    //Midnight Check
-    if (currentTime > 2358) {
-      return;  //do cathode poisoning again.
-    }
-
-    nixieClock.setNumber(currentTime, 0b1111);
+  for (int n = 0; n < 9999; n++) {
+    //Specify what number to display, and which tubes to display
+    nixieClock.setNumber(n, 0b1111);
+    //Light up the tubes
     nixieClock.display();
-    delay(60000 - (timeinfo.tm_sec * 1000));  //Update every minute, adjusting for drift
+    delay(100);
   }
 }
 
