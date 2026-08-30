@@ -1,4 +1,7 @@
 /*
+For programming OTA - use https://dronebotworkshop.com/esp32-ota/
+
+
   Nixie Tube Driver Board (NTDB) 4-Nixie Tube Display Minimal Example
 
   This example demonstrates a minimal display using 4 nixie tubes.
@@ -48,6 +51,9 @@
 #include "Omnixie_NTDB.h"
 
 #include <WiFi.h>
+#include <ESPmDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
 #include "time.h"
 
 const char* ssid = "27WiFi";
@@ -77,13 +83,36 @@ void setup() {
   Serial.begin(115200);
 
   //Connect to Wi-Fi
+  WiFi.setSleep(false);
+
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
+    nixieClock.setNumber(404, 0b1110);
     delay(500);
   }
   Serial.println("Got Wifi");
   // Init time
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  // OTA programming Setup
+  // --- ArduinoOTA Setup ---
+  ArduinoOTA.setHostname("Nixie-Clock-XIAO-ESP32S3");
+
+  ArduinoOTA.onStart([]() {
+    nixieClock.setNumber(1111, 0b1111);
+  });
+
+  ArduinoOTA.onEnd([]() {
+    nixieClock.setNumber(0, 0b1111);
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+  });
+  ArduinoOTA.begin();
 }
 
 void loop() {
@@ -91,6 +120,7 @@ void loop() {
   struct tm timeinfo;
 
   while (true) {
+
     if (!getLocalTime(&timeinfo)) {
       Serial.println("Failed to obtain time");
       return;
@@ -104,7 +134,12 @@ void loop() {
 
     nixieClock.setNumber(currentTime, 0b1111);
     nixieClock.display();
-    delay(60000 - (timeinfo.tm_sec * 1000));  //Update every minute, adjusting for drift
+    unsigned long enter_time = millis();
+    //Wait for a minute, adjusting for drift
+    while ((millis() - enter_time) < (60000 - (timeinfo.tm_sec * 1000))) {
+
+      ArduinoOTA.handle();
+    }
   }
 }
 
