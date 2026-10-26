@@ -30,6 +30,7 @@ void callback(char *rx_topic, byte *payload, unsigned int length) {
   for (int i = 0; i < length; i++) {
     str_payload += (char)payload[i];
   }
+  
   // If payload is a clock update
   if (str_payload.indexOf(":") > 0) {
     // Update clock values
